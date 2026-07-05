@@ -82,15 +82,16 @@ jobs:
       - name: 生成配置
         run: |
           set -euxo pipefail
-          DEVICE_CONFIG=${DEVICE//-/_}
+          # OpenWrt 设备 kconfig 符号保留连字符,直接用 $DEVICE(勿把 -ubi 的连字符换成下划线)
           printf '%s\n' \
             'CONFIG_TARGET_airoha=y' \
             'CONFIG_TARGET_airoha_an7581=y' \
-            "CONFIG_TARGET_airoha_an7581_DEVICE_${DEVICE_CONFIG}=y" \
+            "CONFIG_TARGET_airoha_an7581_DEVICE_${DEVICE}=y" \
             'CONFIG_CCACHE=y' > .config
           make defconfig
-          echo "==== 确认设备被选中 ===="
-          grep "^CONFIG_TARGET_airoha_an7581_DEVICE_${DEVICE_CONFIG}=y" .config
+          echo "==== 确认设备被选中(找不到就 dump 所有 DEVICE 符号供诊断) ===="
+          grep "^CONFIG_TARGET_airoha_an7581_DEVICE_${DEVICE}=y" .config \
+            || { echo "!! 未选中 $DEVICE,现有 DEVICE 符号如下:"; grep -E "CONFIG_TARGET_airoha_an7581_DEVICE_" .config; exit 1; }
 
       - name: 下载源码
         run: |
