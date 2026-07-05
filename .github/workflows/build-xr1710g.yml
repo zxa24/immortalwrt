@@ -1,0 +1,115 @@
+name: build xr1710g (immortalwrt)
+
+# 官方 ImmortalWrt 树 + 移植进来的 xr1710g 设备支持。
+# 干净一致基线,无第三方定制包;econet board 名已写进 an7581.mk 的 SUPPORTED_DEVICES。
+
+on:
+  workflow_dispatch:
+    inputs:
+      device:
+        description: 设备
+        required: true
+        type: choice
+        default: gemtek_xr1710g-ubi
+        options:
+          - gemtek_xr1710g-ubi
+          - gemtek_w1700k-ubi
+
+concurrency:
+  group: build-xr1710g-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      DEVICE: ${{ inputs.device }}
+      DL_DIR: ${{ github.workspace }}/dl
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: 释放磁盘空间
+        run: |
+          set -uxo pipefail
+          echo "==== 清理前 ===="; df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /opt/hostedtoolcache/CodeQL /usr/local/.ghcup \
+                      /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          sudo docker image prune --all --force || true
+          echo "==== 清理后 ===="; df -h /
+
+      - name: 修复脚本权限
+        run: |
+          set -euxo pipefail
+          find scripts -type f -exec chmod +x {} +
+          chmod +x config/check-*.sh 2>/dev/null || true
+
+      - name: 安装依赖
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential bison ccache clang curl fastjar flex gawk gettext \
+            git gcc-multilib g++-multilib libelf-dev libncurses5-dev libssl-dev \
+            libpython3-dev patch pkg-config python3 python3-distutils python3-pip \
+            python3-setuptools qemu-utils rsync subversion swig unzip vim wget \
+            xsltproc zlib1g-dev zstd
+          python3 -m pip install --upgrade pip
+          python3 -m pip install pyelftools
+
+      - name: 缓存下载与 ccache
+        uses: actions/cache@v4
+        with:
+          path: |
+            dl
+            .ccache
+          key: ${{ runner.os }}-iw-${{ inputs.device }}-${{ hashFiles('feeds.conf.default', 'target/linux/airoha/**') }}
+          restore-keys: |
+            ${{ runner.os }}-iw-${{ inputs.device }}-
+
+      - name: 更新 feeds
+        run: |
+          set -euxo pipefail
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: 生成配置
+        run: |
+          set -euxo pipefail
+          DEVICE_CONFIG=${DEVICE//-/_}
+          printf '%s\n' \
+            'CONFIG_TARGET_airoha=y' \
+            'CONFIG_TARGET_airoha_an7581=y' \
+            "CONFIG_TARGET_airoha_an7581_DEVICE_${DEVICE_CONFIG}=y" \
+            'CONFIG_CCACHE=y' > .config
+          make defconfig
+          echo "==== 确认设备被选中 ===="
+          grep "^CONFIG_TARGET_airoha_an7581_DEVICE_${DEVICE_CONFIG}=y" .config
+
+      - name: 下载源码
+        run: |
+          set -euxo pipefail
+          make download -j"$(nproc)"
+
+      - name: 编译固件
+        run: |
+          set -uxo pipefail
+          make -j"$(nproc)" || {
+            echo "==== 并行失败,回退 -j1 V=s 定位真因 ===="
+            make -j1 V=s
+          }
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ inputs.device }}
+          path: |
+            bin/targets/airoha/an7581/**
+          if-no-files-found: error
+          retention-days: 30
