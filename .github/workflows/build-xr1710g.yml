@@ -87,8 +87,12 @@ jobs:
             'CONFIG_TARGET_airoha=y' \
             'CONFIG_TARGET_airoha_an7581=y' \
             "CONFIG_TARGET_airoha_an7581_DEVICE_${DEVICE}=y" \
-            'CONFIG_CCACHE=y' > .config
+            'CONFIG_CCACHE=y' \
+            'CONFIG_PACKAGE_luci=y' \
+            'CONFIG_PACKAGE_luci-i18n-base-zh-cn=y' > .config
           make defconfig
+          echo "==== 确认 luci 进入配置 ===="
+          grep -E "^CONFIG_PACKAGE_luci=y" .config || { echo "!! luci 未选中"; exit 1; }
           echo "==== 确认设备被选中(找不到就 dump 所有 DEVICE 符号供诊断) ===="
           grep "^CONFIG_TARGET_airoha_an7581_DEVICE_${DEVICE}=y" .config \
             || { echo "!! 未选中 $DEVICE,现有 DEVICE 符号如下:"; grep -E "CONFIG_TARGET_airoha_an7581_DEVICE_" .config; exit 1; }
