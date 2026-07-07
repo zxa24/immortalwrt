@@ -32,6 +32,11 @@ platform_do_upgrade() {
 	local board=$(board_name)
 
 	case "$board" in
+		gemtek,xr1710g-ubi)
+			IGNORE_ROOTFS_DATA_MAX=1 \
+			CI_REMOVE_UBIVOLS="config log" \
+			fit_do_upgrade "$1"
+			;;
 		gemtek,w1700k-ubi|\
 		nokia,xg-040g-md-ubi)
 			fit_do_upgrade "$1"
