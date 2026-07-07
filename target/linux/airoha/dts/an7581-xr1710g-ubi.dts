@@ -42,6 +42,7 @@
 &gdm2 {
 	status = "okay";
 
+	managed = "in-band-status";
 	phy-handle = <&phy8>;
 	phy-mode = "usxgmii";
 
@@ -53,6 +54,7 @@
 &gdm4 {
 	status = "okay";
 
+	managed = "in-band-status";
 	phy-handle = <&phy5>;
 	phy-mode = "usxgmii";
 
