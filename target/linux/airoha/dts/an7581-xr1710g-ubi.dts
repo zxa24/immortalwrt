@@ -3,6 +3,7 @@
 /dts-v1/;
 
 #include "an7581-gemtek-17xx-common.dtsi"
+#include <dt-bindings/phy/phy.h>
 
 / {
 	model = "Gemtek XR1710G (OpenWrt U-Boot layout)";
@@ -76,8 +77,8 @@
 			reset-gpios = <&en7581_pinctrl 46 GPIO_ACTIVE_LOW>;
 			reset-assert-us = <200000>;
 			reset-deassert-us = <200000>;
-			realtek,pnswap-tx;
-			realtek,pnswap-rx;
+			tx-polarity = <PHY_POL_INVERT>;
+			rx-polarity = <PHY_POL_INVERT>;
 		};
 
 		phy8: ethernet-phy@8 {
@@ -86,8 +87,8 @@
 			reset-gpios = <&en7581_pinctrl 31 GPIO_ACTIVE_LOW>;
 			reset-assert-us = <200000>;
 			reset-deassert-us = <200000>;
-			realtek,pnswap-tx;
-			realtek,pnswap-rx;
+			tx-polarity = <PHY_POL_INVERT>;
+			rx-polarity = <PHY_POL_INVERT>;
 		};
 	};
 };
@@ -142,4 +143,10 @@
 	color = <LED_COLOR_ID_AMBER>;
 	status = "okay";
 	active-low;
+};
+
+/* Enable the AN7581 PCS — required for the 10G usxgmii ports (gdm2/gdm4).
+ * lvcdy 的旧 DTS 漏了这个,导致 10G 口 phylink 拿不到 PCS 链路状态。 */
+&eth_pcs {
+	status = "okay";
 };
