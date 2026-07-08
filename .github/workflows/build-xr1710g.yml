@@ -14,6 +14,11 @@ on:
         options:
           - gemtek_xr1710g-ubi
           - gemtek_w1700k-ubi
+      docker:
+        description: 编入 Docker(dockerd + docker CLI + dockerman 面板)
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: build-xr1710g-${{ github.ref }}
@@ -26,6 +31,7 @@ jobs:
     env:
       DEBIAN_FRONTEND: noninteractive
       DEVICE: ${{ inputs.device }}
+      DOCKER: ${{ inputs.docker }}
       DL_DIR: ${{ github.workspace }}/dl
       CCACHE_DIR: ${{ github.workspace }}/.ccache
     steps:
@@ -90,9 +96,22 @@ jobs:
             'CONFIG_CCACHE=y' \
             'CONFIG_PACKAGE_luci=y' \
             'CONFIG_PACKAGE_luci-i18n-base-zh-cn=y' > .config
+          # 可选:编入 Docker(workflow_dispatch 勾选 docker 时)
+          if [ "${DOCKER:-false}" = "true" ]; then
+            echo "==== 编入 Docker 包 ===="
+            printf '%s\n' \
+              'CONFIG_PACKAGE_dockerd=y' \
+              'CONFIG_PACKAGE_docker=y' \
+              'CONFIG_PACKAGE_luci-app-dockerman=y' \
+              'CONFIG_PACKAGE_luci-i18n-dockerman-zh-cn=y' >> .config
+          fi
           make defconfig
           echo "==== 确认 luci 进入配置 ===="
           grep -E "^CONFIG_PACKAGE_luci=y" .config || { echo "!! luci 未选中"; exit 1; }
+          if [ "${DOCKER:-false}" = "true" ]; then
+            echo "==== 确认 dockerd 进入配置(defconfig 可能因依赖缺失静默丢包) ===="
+            grep -E "^CONFIG_PACKAGE_dockerd=y" .config || { echo "!! dockerd 未选中"; exit 1; }
+          fi
           echo "==== 确认设备被选中(找不到就 dump 所有 DEVICE 符号供诊断) ===="
           grep "^CONFIG_TARGET_airoha_an7581_DEVICE_${DEVICE}=y" .config \
             || { echo "!! 未选中 $DEVICE,现有 DEVICE 符号如下:"; grep -E "CONFIG_TARGET_airoha_an7581_DEVICE_" .config; exit 1; }
