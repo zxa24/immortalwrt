@@ -130,6 +130,10 @@ define Device/gemtek_xr1710g-ubi
   DEVICE_PACKAGES := airoha-en7581-mt7996-npu-firmware fitblk kmod-i2c-an7581 \
 		    kmod-hwmon-nct7802 kmod-mt7996-firmware wpad-openssl \
 		    rtl826x-firmware
+  # VPN 三节点故障切换(见 maintenance/router-XR1710G/vpn-migration/):kmod-wireguard 是命门
+  # (内核模块,自编固件官方源补不了 vermagic);其余用户态可刷后 apk add,一起编进省事+离线
+  DEVICE_PACKAGES += kmod-wireguard wireguard-tools luci-proto-wireguard \
+		    mwan3 luci-app-mwan3
   UBINIZE_OPTS := -E 5
   BLOCKSIZE := 128k
   PAGESIZE := 2048
