@@ -134,6 +134,9 @@ define Device/gemtek_xr1710g-ubi
   # (内核模块,自编固件官方源补不了 vermagic);其余用户态可刷后 apk add,一起编进省事+离线
   DEVICE_PACKAGES += kmod-wireguard wireguard-tools luci-proto-wireguard \
 		    mwan3 luci-app-mwan3
+  # Tailscale 远程访问(见 maintenance/router-XR1710G/tailscale-plan.md):kmod-tun 是命门
+  # (subnet routing 必需的 TUN 驱动,自编固件补不了);conntrack-tools 补 §21 审计遗留
+  DEVICE_PACKAGES += tailscale kmod-tun conntrack-tools
   UBINIZE_OPTS := -E 5
   BLOCKSIZE := 128k
   PAGESIZE := 2048
