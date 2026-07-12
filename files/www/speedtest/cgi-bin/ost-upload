@@ -1,0 +1,4 @@
+#!/bin/sh
+# OpenSpeedTest upload sink: 读完 POST body 丢弃, 返回 200
+cat > /dev/null 2>&1
+printf "Status: 200 OK\r\nContent-Type: text/plain\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n"
