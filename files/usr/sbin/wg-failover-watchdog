@@ -1,0 +1,10 @@
+#!/bin/sh
+# WG 假死切换看门狗:接口 up 但握手过旧(>180s,路径死)-> ifdown 触发主表干净切换;已 down 的 -> ifup 试探恢复。
+# cron 每分钟跑(见 /etc/uci-defaults/99-xr1710g-overlay 装的条目)。详见 recovery-log §23。
+NOW=$(date +%s)
+for IF in ivpn_mad ivpn_lis ivpn_tor; do
+  if ip link show "$IF" >/dev/null 2>&1; then
+    HS=$(wg show "$IF" latest-handshakes 2>/dev/null | awk '{print $2}'); HS=${HS:-0}; AGE=$((NOW-HS))
+    if [ "$HS" -eq 0 ] || [ "$AGE" -gt 180 ]; then logger -t wgfailover "$IF dead(${AGE}s)->ifdown"; ifdown "$IF"; fi
+  else logger -t wgfailover "$IF down->ifup"; ifup "$IF"; fi
+done
