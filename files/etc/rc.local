@@ -1,0 +1,25 @@
+# Put your custom commands here that should be executed once
+# the system init finished. By default this file does nothing.
+
+# --- Tailscale: bypass mwan3 kill-switch marking (route tailnet/peer-subnet to table 52) ---
+# 根因: mwan3 OUTPUT mangle 给本地/转发回包打 fwmark -> ip rule 2001 -> iVPN 隧道 -> 丢.
+# pref-1000 规则抢在 2001 前, 把 tailnet(100.64/10)+对端LAN(096 的 192.168.1/24)送去 tailscale 表 52.
+# 详见 router-XR1710G/tailscale/deploy-log.md §1.
+for R in 'to 100.64.0.0/10' 'to 192.168.1.0/24'; do
+  ip rule del $R lookup 52 pref 1000 2>/dev/null; ip rule add $R lookup 52 pref 1000
+done
+ip -6 rule del to fd7a:115c:a1e0::/48 lookup 52 pref 1000 2>/dev/null
+ip -6 rule add to fd7a:115c:a1e0::/48 lookup 52 pref 1000
+
+# --- OpenSpeedTest: 30MB 下载测试文件(在 overlay,sysupgrade 会丢 -> 开机补生成)---
+# 静态站点其余文件已烤进 squashfs;仅这个大文件靠开机现造(/dev/zero,LAN HTTP 无压缩,填零无妨).
+[ -s /www/speedtest/downloading ] || head -c 31457280 /dev/zero > /www/speedtest/downloading 2>/dev/null
+
+# --- RPS/XPS 铺开:缓解两个 10G 口(wan=GDM1 / lan2=GDM4)跨 MAC 桥接的单核软中断瓶颈 ---
+# 默认 rps_cpus=1(仅 CPU0)-> 下载单核卡 ~1.8G;铺到 4 核后双向 ~2.5G(实测,零风险,不碰 VPN).
+for d in wan lan2; do
+  for q in /sys/class/net/$d/queues/rx-*/rps_cpus; do echo f > "$q" 2>/dev/null; done
+  for q in /sys/class/net/$d/queues/tx-*/xps_cpus; do echo f > "$q" 2>/dev/null; done
+done
+
+exit 0
