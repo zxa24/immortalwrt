@@ -1,0 +1,42 @@
+#!/bin/sh
+# 首刷一次性配置(uci-defaults 被 source 执行、成功即自删;无需 +x)。
+# 幂等:每项先判存在。config-keeping sysupgrade 会保留旧 config,这里只在缺失时补 -> 干净重刷也能自恢复。
+
+# --- 0. 保证烤进来的脚本可执行(git 若没保留 +x 位,这里兜底)---
+chmod +x /usr/sbin/wg-failover-watchdog /www/speedtest/cgi-bin/ost-upload 2>/dev/null
+
+# --- 1. uhttpd speedtest 实例(LAN-only :3000,测设备<->路由器吞吐)---
+if ! uci -q get uhttpd.speedtest >/dev/null; then
+  uci set uhttpd.speedtest=uhttpd
+  uci set uhttpd.speedtest.listen_http='10.0.1.1:3000'
+  uci set uhttpd.speedtest.home='/www/speedtest'
+  uci set uhttpd.speedtest.index_page='index.html'
+  uci set uhttpd.speedtest.max_requests='30'
+  uci set uhttpd.speedtest.script_timeout='60'
+  uci set uhttpd.speedtest.no_dirlists='1'
+  uci set uhttpd.speedtest.cgi_prefix='/cgi-bin'
+  uci commit uhttpd
+fi
+
+# --- 2. tailscale 防火墙区(tailscale0 纳入 fw4,tailnet 可达路由器 + 经它到 LAN)---
+if ! uci -q get firewall.ts >/dev/null; then
+  uci set firewall.ts=zone
+  uci set firewall.ts.name='tailscale'
+  uci set firewall.ts.input='ACCEPT'
+  uci set firewall.ts.output='ACCEPT'
+  uci set firewall.ts.forward='ACCEPT'
+  uci add_list firewall.ts.device='tailscale0'
+  uci set firewall.ts2lan=forwarding
+  uci set firewall.ts2lan.src='tailscale'
+  uci set firewall.ts2lan.dest='lan'
+  uci set firewall.lan2ts=forwarding
+  uci set firewall.lan2ts.src='lan'
+  uci set firewall.lan2ts.dest='tailscale'
+  uci commit firewall
+fi
+
+# --- 3. WG 假死看门狗 cron(每分钟)---
+grep -q wg-failover-watchdog /etc/crontabs/root 2>/dev/null || \
+  echo '* * * * * /usr/sbin/wg-failover-watchdog' >> /etc/crontabs/root
+
+exit 0
