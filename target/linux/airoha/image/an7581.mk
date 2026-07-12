@@ -137,6 +137,11 @@ define Device/gemtek_xr1710g-ubi
   # Tailscale 远程访问(见 maintenance/router-XR1710G/tailscale-plan.md):kmod-tun 是命门
   # (subnet routing 必需的 TUN 驱动,自编固件补不了);conntrack-tools 补 §21 审计遗留
   DEVICE_PACKAGES += tailscale kmod-tun conntrack-tools
+  # 排障/测速常用用户态(刷完 apk 也能补,编进省离线重装):curl/iperf3/librespeed-cli
+  DEVICE_PACKAGES += curl iperf3 librespeed-cli
+  # br_netfilter:让桥接流量进 netfilter,才能给 br-lan 配 inet flowtable 做硬件桥接卸载(开法B)。
+  # snapshot 无此 kmod 且自编 vermagic 补不了 → 必须编进固件。回报不确定(AN7581 L2 桥接卸载无人实测)。
+  DEVICE_PACKAGES += kmod-br-netfilter
   UBINIZE_OPTS := -E 5
   BLOCKSIZE := 128k
   PAGESIZE := 2048
