@@ -1,0 +1,11 @@
+#!/bin/sh
+# 两个 10G 口(wan=GDM1 / lan2=GDM4)up 时铺开 RPS/XPS 到全 4 核。
+# 默认 rps_cpus=1(仅 CPU0)-> 跨 MAC 桥接单核软中断卡 ~1.8G;铺开后双向 ~2.5G(实测).
+# 放 hotplug 而非 rc.local:rc.local 时序太早(队列未就绪)且网络事件会重置 -> hotplug 每次 up 都补.
+[ "$ACTION" = "add" ] || return 0
+case "$DEVICENAME" in
+  wan|lan2)
+    for q in /sys/class/net/$DEVICENAME/queues/rx-*/rps_cpus; do echo f > "$q" 2>/dev/null; done
+    for q in /sys/class/net/$DEVICENAME/queues/tx-*/xps_cpus; do echo f > "$q" 2>/dev/null; done
+    ;;
+esac
