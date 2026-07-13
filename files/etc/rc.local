@@ -15,11 +15,6 @@ ip -6 rule add to fd7a:115c:a1e0::/48 lookup 52 pref 1000
 # 静态站点其余文件已烤进 squashfs;仅这个大文件靠开机现造(/dev/zero,LAN HTTP 无压缩,填零无妨).
 [ -s /www/speedtest/downloading ] || head -c 31457280 /dev/zero > /www/speedtest/downloading 2>/dev/null
 
-# --- RPS/XPS 铺开:缓解两个 10G 口(wan=GDM1 / lan2=GDM4)跨 MAC 桥接的单核软中断瓶颈 ---
-# 默认 rps_cpus=1(仅 CPU0)-> 下载单核卡 ~1.8G;铺到 4 核后双向 ~2.5G(实测,零风险,不碰 VPN).
-for d in wan lan2; do
-  for q in /sys/class/net/$d/queues/rx-*/rps_cpus; do echo f > "$q" 2>/dev/null; done
-  for q in /sys/class/net/$d/queues/tx-*/xps_cpus; do echo f > "$q" 2>/dev/null; done
-done
+# 注:RPS/XPS 铺开改由 /etc/hotplug.d/net/20-rps-xps 处理(rc.local 时序太早,10G 口队列未就绪).
 
 exit 0
