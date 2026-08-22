@@ -19,6 +19,11 @@ on:
         required: false
         type: boolean
         default: false
+      proxy:
+        description: 编入代理栈(sing-box + kmod + jq) —— 自编固件事后装不了,必须烤进镜像
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: build-xr1710g-${{ github.ref }}
@@ -32,6 +37,7 @@ jobs:
       DEBIAN_FRONTEND: noninteractive
       DEVICE: ${{ inputs.device }}
       DOCKER: ${{ inputs.docker }}
+      PROXY: ${{ inputs.proxy }}
       DL_DIR: ${{ github.workspace }}/dl
       CCACHE_DIR: ${{ github.workspace }}/.ccache
     steps:
@@ -105,12 +111,28 @@ jobs:
               'CONFIG_PACKAGE_luci-app-dockerman=y' \
               'CONFIG_PACKAGE_luci-i18n-dockerman-zh-cn=y' >> .config
           fi
+          # 代理栈:自编固件的内核 vermagic 与官方 snapshot 源不匹配,sing-box 依赖的
+          # kmod-inet-diag / kmod-netlink-diag 在源里是 "no such package",
+          # 事后 apk 装这条路是堵死的 —— 必须在这里编进去。(2026-08-22 xr1-cn 实测)
+          if [ "${PROXY:-false}" = "true" ]; then
+            echo "==== 编入代理栈 ===="
+            {
+              echo 'CONFIG_PACKAGE_sing-box=y'
+              echo 'CONFIG_PACKAGE_kmod-nft-tproxy=y'
+              echo 'CONFIG_PACKAGE_jq=y'
+            } >> .config
+          fi
           make defconfig
           echo "==== 确认 luci 进入配置 ===="
           grep -E "^CONFIG_PACKAGE_luci=y" .config || { echo "!! luci 未选中"; exit 1; }
           if [ "${DOCKER:-false}" = "true" ]; then
             echo "==== 确认 dockerd 进入配置(defconfig 可能因依赖缺失静默丢包) ===="
             grep -E "^CONFIG_PACKAGE_dockerd=y" .config || { echo "!! dockerd 未选中"; exit 1; }
+          fi
+          if [ "${PROXY:-false}" = "true" ]; then
+            echo "==== 确认代理栈进入配置(defconfig 可能因依赖缺失静默丢包) ===="
+            grep -E "^CONFIG_PACKAGE_sing-box=y" .config || { echo "!! sing-box 未选中"; exit 1; }
+            grep -E "^CONFIG_PACKAGE_kmod-inet-diag=y" .config || { echo "!! kmod-inet-diag 未被依赖拉入"; exit 1; }
           fi
           echo "==== 确认设备被选中(找不到就 dump 所有 DEVICE 符号供诊断) ===="
           grep "^CONFIG_TARGET_airoha_an7581_DEVICE_${DEVICE}=y" .config \
