@@ -24,6 +24,15 @@ on:
         required: false
         type: boolean
         default: false
+      overlay:
+        description: files/ 覆盖层 —— xr1=全量(默认,保持现状) / common=仅设备中立件 / none=不烤
+        required: false
+        type: choice
+        default: xr1
+        options:
+          - xr1
+          - common
+          - none
 
 concurrency:
   group: build-xr1710g-${{ github.ref }}
@@ -38,6 +47,7 @@ jobs:
       DEVICE: ${{ inputs.device }}
       DOCKER: ${{ inputs.docker }}
       PROXY: ${{ inputs.proxy }}
+      OVERLAY: ${{ inputs.overlay }}
       DL_DIR: ${{ github.workspace }}/dl
       CCACHE_DIR: ${{ github.workspace }}/.ccache
     steps:
@@ -137,6 +147,63 @@ jobs:
           echo "==== 确认设备被选中(找不到就 dump 所有 DEVICE 符号供诊断) ===="
           grep "^CONFIG_TARGET_airoha_an7581_DEVICE_${DEVICE}=y" .config \
             || { echo "!! 未选中 $DEVICE,现有 DEVICE 符号如下:"; grep -E "CONFIG_TARGET_airoha_an7581_DEVICE_" .config; exit 1; }
+
+      - name: 裁剪 files/ 覆盖层(按设备)
+        run: |
+          set -euo pipefail
+          # buildroot 会**无条件**把仓库根的 files/ 复制进 rootfs,而本 workflow 此前完全没引用它。
+          # 这个 overlay 是给 xr1 写的:里面的脚本写死了 xr1 的接口名(ivpn_*)与网段(192.168.1.0/24)。
+          # 拿本 workflow 编"干净底包"给别的设备时,那些东西会**静默**跟着烤进去 —— 已实证多次
+          # (xr1-cn 刷完后 /etc/rc.local 带着 096 迁移前的网段;/usr/sbin/wg-failover-watchdog
+          #  在遍历本机根本不存在的接口)。
+          #
+          # 这一步把"烤什么"变成显式选择,并把最终清单**全量打印**:既不静默裁剪,也不静默全量。
+          OV="${OVERLAY:-xr1}"
+          if [ ! -d files ]; then
+            echo "仓库根没有 files/ —— 无覆盖层可烤"
+            exit 0
+          fi
+
+          # xr1 专属:写死了该机的接口名/网段/服务 ⇒ 烤到别的设备上是死码或误配
+          XR1_ONLY="files/usr/sbin/wg-failover-watchdog files/etc/hotplug.d/iface files/etc/rc.local files/etc/uci-defaults"
+          # 设备中立:同型号硬件都适用,且不含任何站点/网络配置
+          COMMON_RE='^(files/README\.md|files/lib/|files/etc/hotplug\.d/net/|files/www/)'
+
+          case "$OV" in
+            xr1)
+              echo "==== overlay=xr1:全量烤入(与历史行为一致) ===="
+              ;;
+            common)
+              echo "==== overlay=common:剔除 xr1 专属件 ===="
+              for p in $XR1_ONLY; do
+                if [ -e "$p" ]; then rm -rf "$p"; echo "  剔除 $p"; fi
+              done
+              # 反向校验:剔除后若还剩下不属于"设备中立"清单的文件,说明 files/ 里加了新东西
+              # 而本步骤的分类清单没跟上 ⇒ **显式失败**,而不是把未知文件静默烤进去。
+              LEFT="$(find files -type f | grep -vE "$COMMON_RE" || true)"
+              if [ -n "$LEFT" ]; then
+                echo "!! 剔除后仍有不在设备中立清单里的文件:"
+                echo "$LEFT" | sed 's/^/    /'
+                echo "!! files/ 有新增件而本步骤的分类清单未更新 —— 请先判定它属于哪一类再重跑"
+                exit 1
+              fi
+              ;;
+            none)
+              echo "==== overlay=none:整个 files/ 不烤 ===="
+              rm -rf files
+              ;;
+            *)
+              echo "!! 未知 overlay 值:$OV"; exit 1
+              ;;
+          esac
+
+          echo "==== 实际会被烤进 rootfs 的文件(全量列出,不截断) ===="
+          if [ -d files ]; then
+            find files -type f | sort | sed 's/^/  /'
+            echo "  共 $(find files -type f | wc -l) 个文件"
+          else
+            echo "  (无)"
+          fi
 
       - name: 下载源码
         run: |
